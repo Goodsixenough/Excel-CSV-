@@ -15,7 +15,7 @@ const getColumnLetter = (colIndex: number) => {
 export default function App() {
   const [file1, setFile1] = useState<File | null>(null);
   const [file2, setFile2] = useState<File | null>(null);
-  const [file2Format, setFile2Format] = useState<'type1' | 'type2'>('type1');
+  const [file2Type, setFile2Type] = useState<'type1' | 'type2'>('type1');
   const [file2Headers, setFile2Headers] = useState<{index: number, letter: string, name: string}[]>([]);
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const [previewData, setPreviewData] = useState<any[][] | null>(null);
@@ -38,7 +38,7 @@ export default function App() {
     setError(null);
   };
 
-  const processFile2 = async (file: File, format: 'type1' | 'type2') => {
+  const processFile2 = async (file: File, type: 'type1' | 'type2' = file2Type) => {
     setFile2(file);
     setResultUrl(null);
     setPreviewData(null);
@@ -46,38 +46,36 @@ export default function App() {
 
     try {
       const buffer = await file.arrayBuffer();
-      const headerRowIdx = format === 'type1' ? 0 : 2;
-      const wb = XLSX.read(buffer, { sheetRows: headerRowIdx + 5 }); // Read first few rows to be safe
+      const wb = XLSX.read(buffer, { sheetRows: 10 }); // Read first 10 rows to be safe
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
-      if (rows.length > headerRowIdx) {
-        const headersRow = rows[headerRowIdx] || [];
-        const maxCols = Math.max(headersRow.length, 26);
-        const headers = Array.from({ length: maxCols }).map((_, i) => {
-          let h = headersRow[i];
-          let name = h !== undefined && h !== null && h !== '' ? String(h) : `列 ${getColumnLetter(i)}`;
-          return {
-            index: i,
-            letter: getColumnLetter(i),
-            name
-          };
-        });
+      
+      const headerRowIndex = type === 'type1' ? 0 : 2;
 
-        if (format === 'type2') {
-          headers.push({ index: -1, letter: '新增', name: '电压' });
-        }
-
+      if (rows.length > headerRowIndex) {
+        const headersRow = rows[headerRowIndex] || [];
+        const headers = headersRow.map((h, i) => ({
+          index: i,
+          letter: getColumnLetter(i),
+          name: h !== undefined && h !== null && h !== '' ? String(h) : `列 ${getColumnLetter(i)}`
+        }));
         setFile2Headers(headers);
 
-        if (format === 'type1') {
+        if (type === 'type1') {
           // Default order: D(3), E(4), F(5), M(12), N(13), Q(16), T(19), W(22), X(23), G(6), O(14), P(15)
           const defaultTargetIndices = [3, 4, 5, 12, 13, 16, 19, 22, 23, 6, 14, 15];
-          setSelectedIndices(defaultTargetIndices);
+          const availableIndices = defaultTargetIndices.filter(idx => idx < headersRow.length);
+          setSelectedIndices(availableIndices);
         } else {
-          // Default order: D(3), E(4), G(6), M(12), R(17), I(8), H(7), F(5), J(9), K(10), 新增(-1)
-          const defaultTargetIndices = [3, 4, 6, 12, 17, 8, 7, 5, 9, 10, -1];
-          setSelectedIndices(defaultTargetIndices);
+          // Type 2 order: D(3), E(4), G(6), M(12), R(17), I(8), H(7), F(5), J(9), K(10)
+          const defaultTargetIndices = [3, 4, 6, 12, 17, 8, 7, 5, 9, 10];
+          const availableIndices = defaultTargetIndices.filter(idx => idx < headersRow.length);
+          setSelectedIndices(availableIndices);
         }
+      } else {
+        setError(`文件行数不足，无法在第 ${headerRowIndex + 1} 行找到表头。`);
+        setFile2Headers([]);
+        setSelectedIndices([]);
       }
     } catch (err) {
       setError('读取第二个文件表头失败，请确保它是有效的 Excel 或 CSV 文件。');
@@ -92,14 +90,7 @@ export default function App() {
 
   const handleFile2Change = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      processFile2(e.target.files[0], file2Format);
-    }
-  };
-
-  const handleFormatChange = (format: 'type1' | 'type2') => {
-    setFile2Format(format);
-    if (file2) {
-      processFile2(file2, format);
+      processFile2(e.target.files[0]);
     }
   };
 
@@ -135,9 +126,9 @@ export default function App() {
     e.preventDefault();
     setIsDragging2(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      processFile2(e.dataTransfer.files[0], file2Format);
+      processFile2(e.dataTransfer.files[0]);
     }
-  }, [file2Format]);
+  }, []);
 
   const toggleColumn = (idx: number) => {
     setSelectedIndices(prev => 
@@ -198,11 +189,15 @@ export default function App() {
       return { index: idx, name: header ? header.name : `列 ${getColumnLetter(idx)}` };
     });
 
+    const extraColumns = file2Type === 'type2' ? [{ name: '电压', value: '' }] : [];
+    const file2HeaderRowIndex = file2Type === 'type1' ? 0 : 2;
+
     workerRef.current.postMessage({
       file1,
       file2,
       selectedCols,
-      file2DataRowStartIndex: file2Format === 'type1' ? 1 : 3
+      file2HeaderRowIndex,
+      extraColumns
     });
   };
 
@@ -257,35 +252,6 @@ export default function App() {
                 <p className="text-xs text-slate-500">日频数据 (第2列为时间)</p>
               </div>
             </div>
-
-            <div className="mb-4 flex flex-col space-y-2 text-sm bg-slate-50 p-3 rounded-lg border border-slate-200">
-              <span className="text-slate-600 font-medium">文件格式:</span>
-              <div className="flex flex-col space-y-2">
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input 
-                    type="radio" 
-                    name="file2Format" 
-                    value="type1" 
-                    checked={file2Format === 'type1'} 
-                    onChange={() => handleFormatChange('type1')}
-                    className="text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span>标准格式 (表头在第1行)</span>
-                </label>
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input 
-                    type="radio" 
-                    name="file2Format" 
-                    value="type2" 
-                    checked={file2Format === 'type2'} 
-                    onChange={() => handleFormatChange('type2')}
-                    className="text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span>特殊格式 (表头在第3行，K列为电压)</span>
-                </label>
-              </div>
-            </div>
-
             <label 
               className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
                 isDragging2 
@@ -304,13 +270,54 @@ export default function App() {
               </div>
               <input type="file" className="hidden" accept=".csv, .xlsx, .xls" onChange={handleFile2Change} />
             </label>
+
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <p className="text-sm font-medium text-slate-700 mb-2">选择文件格式：</p>
+              <div className="flex flex-col space-y-2">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="file2Type" 
+                    value="type1" 
+                    className="text-emerald-600 focus:ring-emerald-500"
+                    checked={file2Type === 'type1'} 
+                    onChange={() => {
+                      setFile2Type('type1');
+                      if (file2) processFile2(file2, 'type1');
+                    }} 
+                  />
+                  <span className="text-sm text-slate-600">标准格式 (表头在第1行)</span>
+                </label>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="file2Type" 
+                    value="type2" 
+                    className="text-emerald-600 focus:ring-emerald-500"
+                    checked={file2Type === 'type2'} 
+                    onChange={() => {
+                      setFile2Type('type2');
+                      if (file2) processFile2(file2, 'type2');
+                    }} 
+                  />
+                  <span className="text-sm text-slate-600">特殊格式 (表头在第3行，追加"电压"列)</span>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Column Selection */}
         {file2Headers.length > 0 && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h2 className="font-semibold text-lg mb-4">选择要拼接的列</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-lg">选择要拼接的列</h2>
+              {file2Type === 'type2' && (
+                <span className="text-xs font-medium bg-amber-100 text-amber-700 px-2 py-1 rounded-md">
+                  注意：将在最后自动追加一列“电压”
+                </span>
+              )}
+            </div>
             <div className="flex flex-wrap gap-3">
               {file2Headers.map((col) => {
                 const isSelected = selectedIndices.includes(col.index);

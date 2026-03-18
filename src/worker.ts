@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 
 self.onmessage = async (e) => {
-  const { file1, file2, selectedCols, file2DataRowStartIndex = 1 } = e.data;
+  const { file1, file2, selectedCols, file2HeaderRowIndex = 0, extraColumns = [] } = e.data;
 
   try {
     self.postMessage({ type: 'progress', message: '正在读取第二个文件 (日频数据)...', progress: 10 });
@@ -31,7 +31,7 @@ self.onmessage = async (e) => {
         return String(val).trim();
     };
 
-    for (let i = file2DataRowStartIndex; i < rows2.length; i++) {
+    for (let i = file2HeaderRowIndex + 1; i < rows2.length; i++) {
         const row = rows2[i];
         if (row.length > 1) {
             const dateKey = formatDate(row[1]); // 2nd column (index 1)
@@ -52,7 +52,7 @@ self.onmessage = async (e) => {
     self.postMessage({ type: 'progress', message: '正在合并数据 (约13万行)...', progress: 70 });
     const result: any[][] = [];
     const header1 = rows1[0];
-    const appendedHeaders = selectedCols.map((c: any) => c.name);
+    const appendedHeaders = selectedCols.map((c: any) => c.name).concat(extraColumns.map((c: any) => c.name));
     result.push([...header1, ...appendedHeaders]);
 
     for (let i = 1; i < rows1.length; i++) {
@@ -63,7 +63,8 @@ self.onmessage = async (e) => {
         const row2 = dateMap.get(dateKey);
 
         const appended = selectedCols.map((c: any) => row2 ? row2[c.index] : "");
-        result.push([...row1, ...appended]);
+        const extra = extraColumns.map((c: any) => c.value);
+        result.push([...row1, ...appended, ...extra]);
 
         if (i % 10000 === 0) {
             const p = 70 + Math.floor((i / rows1.length) * 20);
