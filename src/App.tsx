@@ -54,11 +54,15 @@ export default function App() {
 
       if (rows.length > headerRowIndex) {
         const headersRow = rows[headerRowIndex] || [];
-        const headers = headersRow.map((h, i) => ({
-          index: i,
-          letter: getColumnLetter(i),
-          name: h !== undefined && h !== null && h !== '' ? String(h) : `列 ${getColumnLetter(i)}`
-        }));
+        const headers = [];
+        for (let i = 0; i < headersRow.length; i++) {
+          const h = headersRow[i];
+          headers.push({
+            index: i,
+            letter: getColumnLetter(i),
+            name: h !== undefined && h !== null && h !== '' ? String(h) : `列 ${getColumnLetter(i)}`
+          });
+        }
         setFile2Headers(headers);
 
         if (type === 'type1') {
@@ -185,7 +189,7 @@ export default function App() {
     };
 
     const selectedCols = selectedIndices.map(idx => {
-      const header = file2Headers.find(h => h.index === idx);
+      const header = file2Headers.find(h => h && h.index === idx);
       return { index: idx, name: header ? header.name : `列 ${getColumnLetter(idx)}` };
     });
 
