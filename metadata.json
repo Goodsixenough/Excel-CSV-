@@ -1,0 +1,5 @@
+{
+  "name": "Excel/CSV 数据合并工具",
+  "description": "将日频数据按日期拼接到分钟级数据后面，支持百万级数据处理",
+  "requestFramePermissions": []
+}
