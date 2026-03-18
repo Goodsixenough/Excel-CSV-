@@ -56,15 +56,17 @@ export default function App() {
         const headers = Array.from({ length: maxCols }).map((_, i) => {
           let h = headersRow[i];
           let name = h !== undefined && h !== null && h !== '' ? String(h) : `列 ${getColumnLetter(i)}`;
-          if (format === 'type2' && i === 10) { // K column
-            name = '电压';
-          }
           return {
             index: i,
             letter: getColumnLetter(i),
             name
           };
         });
+
+        if (format === 'type2') {
+          headers.push({ index: -1, letter: '新增', name: '电压' });
+        }
+
         setFile2Headers(headers);
 
         if (format === 'type1') {
@@ -72,8 +74,8 @@ export default function App() {
           const defaultTargetIndices = [3, 4, 5, 12, 13, 16, 19, 22, 23, 6, 14, 15];
           setSelectedIndices(defaultTargetIndices);
         } else {
-          // Default order: D(3), E(4), G(6), M(12), R(17), I(8), H(7), F(5), J(9), K(10)
-          const defaultTargetIndices = [3, 4, 6, 12, 17, 8, 7, 5, 9, 10];
+          // Default order: D(3), E(4), G(6), M(12), R(17), I(8), H(7), F(5), J(9), K(10), 新增(-1)
+          const defaultTargetIndices = [3, 4, 6, 12, 17, 8, 7, 5, 9, 10, -1];
           setSelectedIndices(defaultTargetIndices);
         }
       }
