@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 
 self.onmessage = async (e) => {
-  const { file1, file2, selectedCols } = e.data;
+  const { file1, file2, selectedCols, file2DataRowStartIndex = 1 } = e.data;
 
   try {
     self.postMessage({ type: 'progress', message: '正在读取第二个文件 (日频数据)...', progress: 10 });
@@ -31,7 +31,7 @@ self.onmessage = async (e) => {
         return String(val).trim();
     };
 
-    for (let i = 1; i < rows2.length; i++) {
+    for (let i = file2DataRowStartIndex; i < rows2.length; i++) {
         const row = rows2[i];
         if (row.length > 1) {
             const dateKey = formatDate(row[1]); // 2nd column (index 1)

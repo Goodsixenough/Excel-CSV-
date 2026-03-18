@@ -15,6 +15,7 @@ const getColumnLetter = (colIndex: number) => {
 export default function App() {
   const [file1, setFile1] = useState<File | null>(null);
   const [file2, setFile2] = useState<File | null>(null);
+  const [file2Format, setFile2Format] = useState<'type1' | 'type2'>('type1');
   const [file2Headers, setFile2Headers] = useState<{index: number, letter: string, name: string}[]>([]);
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const [previewData, setPreviewData] = useState<any[][] | null>(null);
@@ -37,7 +38,7 @@ export default function App() {
     setError(null);
   };
 
-  const processFile2 = async (file: File) => {
+  const processFile2 = async (file: File, format: 'type1' | 'type2') => {
     setFile2(file);
     setResultUrl(null);
     setPreviewData(null);
@@ -45,22 +46,36 @@ export default function App() {
 
     try {
       const buffer = await file.arrayBuffer();
-      const wb = XLSX.read(buffer, { sheetRows: 5 }); // Read first 5 rows to be safe
+      const headerRowIdx = format === 'type1' ? 0 : 2;
+      const wb = XLSX.read(buffer, { sheetRows: headerRowIdx + 5 }); // Read first few rows to be safe
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
-      if (rows.length > 0) {
-        const headersRow = rows[0];
-        const headers = headersRow.map((h, i) => ({
-          index: i,
-          letter: getColumnLetter(i),
-          name: h !== undefined && h !== null && h !== '' ? String(h) : `列 ${getColumnLetter(i)}`
-        }));
+      if (rows.length > headerRowIdx) {
+        const headersRow = rows[headerRowIdx] || [];
+        const maxCols = Math.max(headersRow.length, 26);
+        const headers = Array.from({ length: maxCols }).map((_, i) => {
+          let h = headersRow[i];
+          let name = h !== undefined && h !== null && h !== '' ? String(h) : `列 ${getColumnLetter(i)}`;
+          if (format === 'type2' && i === 10) { // K column
+            name = '电压';
+          }
+          return {
+            index: i,
+            letter: getColumnLetter(i),
+            name
+          };
+        });
         setFile2Headers(headers);
 
-        // Default order: D(3), E(4), F(5), M(12), N(13), Q(16), T(19), W(22), X(23), G(6), O(14), P(15)
-        const defaultTargetIndices = [3, 4, 5, 12, 13, 16, 19, 22, 23, 6, 14, 15];
-        const availableIndices = defaultTargetIndices.filter(idx => idx < headersRow.length);
-        setSelectedIndices(availableIndices);
+        if (format === 'type1') {
+          // Default order: D(3), E(4), F(5), M(12), N(13), Q(16), T(19), W(22), X(23), G(6), O(14), P(15)
+          const defaultTargetIndices = [3, 4, 5, 12, 13, 16, 19, 22, 23, 6, 14, 15];
+          setSelectedIndices(defaultTargetIndices);
+        } else {
+          // Default order: D(3), E(4), G(6), M(12), R(17), I(8), H(7), F(5), J(9), K(10)
+          const defaultTargetIndices = [3, 4, 6, 12, 17, 8, 7, 5, 9, 10];
+          setSelectedIndices(defaultTargetIndices);
+        }
       }
     } catch (err) {
       setError('读取第二个文件表头失败，请确保它是有效的 Excel 或 CSV 文件。');
@@ -75,7 +90,14 @@ export default function App() {
 
   const handleFile2Change = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      processFile2(e.target.files[0]);
+      processFile2(e.target.files[0], file2Format);
+    }
+  };
+
+  const handleFormatChange = (format: 'type1' | 'type2') => {
+    setFile2Format(format);
+    if (file2) {
+      processFile2(file2, format);
     }
   };
 
@@ -111,9 +133,9 @@ export default function App() {
     e.preventDefault();
     setIsDragging2(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      processFile2(e.dataTransfer.files[0]);
+      processFile2(e.dataTransfer.files[0], file2Format);
     }
-  }, []);
+  }, [file2Format]);
 
   const toggleColumn = (idx: number) => {
     setSelectedIndices(prev => 
@@ -177,7 +199,8 @@ export default function App() {
     workerRef.current.postMessage({
       file1,
       file2,
-      selectedCols
+      selectedCols,
+      file2DataRowStartIndex: file2Format === 'type1' ? 1 : 3
     });
   };
 
@@ -232,6 +255,35 @@ export default function App() {
                 <p className="text-xs text-slate-500">日频数据 (第2列为时间)</p>
               </div>
             </div>
+
+            <div className="mb-4 flex flex-col space-y-2 text-sm bg-slate-50 p-3 rounded-lg border border-slate-200">
+              <span className="text-slate-600 font-medium">文件格式:</span>
+              <div className="flex flex-col space-y-2">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="file2Format" 
+                    value="type1" 
+                    checked={file2Format === 'type1'} 
+                    onChange={() => handleFormatChange('type1')}
+                    className="text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span>标准格式 (表头在第1行)</span>
+                </label>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="file2Format" 
+                    value="type2" 
+                    checked={file2Format === 'type2'} 
+                    onChange={() => handleFormatChange('type2')}
+                    className="text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span>特殊格式 (表头在第3行，K列为电压)</span>
+                </label>
+              </div>
+            </div>
+
             <label 
               className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
                 isDragging2 
